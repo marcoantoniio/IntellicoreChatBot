@@ -14,7 +14,8 @@ class Bot:
         self.file_context = None
 
         if api_key:
-            self.client = OpenAI(api_key=self.api_key)
+            os.environ["OPENAI_API_KEY"] = api_key
+            self.client = OpenAI()
 
     def read_pdf(self, file_path):
         text = ""
@@ -61,7 +62,8 @@ class Bot:
 
         try:
             if not self.client:
-                self.client = OpenAI(api_key=self.api_key)
+                os.environ["OPENAI_API_KEY"] = self.api_key
+                self.client = OpenAI()
 
             messages = []
             if self.file_context:
@@ -79,7 +81,8 @@ class Bot:
 
     def set_api_key(self, api_key):
         self.api_key = api_key
-        self.client = OpenAI(api_key=self.api_key)
+        os.environ["OPENAI_API_KEY"] = api_key
+        self.client = OpenAI()
         return "🔑 API Key atualizada com sucesso."
 
 
