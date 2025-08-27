@@ -79,8 +79,7 @@ class Bot:
 
     def set_api_key(self, api_key):
         self.api_key = api_key
-        os.environ["OPENAI_API_KEY"] = api_key
-        self.client = OpenAI()  # instância via variável de ambiente
+        self.client = OpenAI(api_key=api_key)
         return "🔑 API Key atualizada com sucesso."
 
 
