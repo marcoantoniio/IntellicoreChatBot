@@ -1,21 +1,21 @@
-# main.py
 import streamlit as st
-import fitz  # PyMuPDF
-import os
 from openai import OpenAI
+import fitz
+import os
 
-# -------------------------
-# Classe Bot
-# -------------------------
+# ===================== Bot =====================
 class Bot:
     def __init__(self, api_key=None):
         self.api_key = api_key
-        self.client = None
         self.file_context = None
+        self.client = OpenAI(api_key=api_key) if api_key else None
 
-        if api_key:
-            os.environ["OPENAI_API_KEY"] = api_key
-            self.client = OpenAI()  # sem passar api_key
+        self.load_file_context()
+
+    def set_api_key(self, api_key):
+        self.api_key = api_key
+        self.client = OpenAI(api_key=api_key)
+        return "API Key atualizada com sucesso."
 
     def read_pdf(self, file_path):
         text = ""
@@ -27,118 +27,105 @@ class Bot:
         except Exception as e:
             return f"[Erro ao ler PDF: {e}]"
 
-    def load_file_context(self, uploaded_files):
+    def load_file_context(self, directory=None):
+        if directory is None:
+            directory = os.path.dirname(os.path.abspath(__file__))
+
         context = ""
+
         try:
-            for uploaded_file in uploaded_files:
-                filename = uploaded_file.name
+            for filename in os.listdir(directory):
+                file_path = os.path.join(directory, filename)
 
                 if filename.lower().endswith(".txt"):
-                    content = uploaded_file.read().decode("utf-8")
-                    context += f"\n\n--- {filename} ---\n{content}"
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        context += f"\n\n--- {filename} ---\n"
+                        context += f.read()
 
                 elif filename.lower().endswith(".pdf"):
-                    temp_path = f"/tmp/{filename}"
-                    with open(temp_path, "wb") as f:
-                        f.write(uploaded_file.read())
-                    context += f"\n\n--- {filename} ---\n{self.read_pdf(temp_path)}"
+                    context += f"\n\n--- {filename} ---\n"
+                    context += self.read_pdf(file_path)
 
             if context:
                 self.file_context = context
-                return "📂 Arquivos carregados com sucesso."
+                return "Arquivos .txt e .pdf foram carregados com sucesso."
             else:
-                return "⚠️ Nenhum arquivo válido carregado."
+                return "Nenhum arquivo .txt ou .pdf encontrado no diretório."
 
         except Exception as e:
             return f"Erro ao carregar arquivos: {str(e)}"
 
     def ask_chatgpt(self, user_input):
-        if not self.api_key:
-            return "⚠️ API Key não definida. Configure primeiro em '⚙️ Configurações'."
+        if not self.client:
+            return "API Key não definida. Atualize a API."
 
         if not user_input.strip():
-            return "⚠️ Por favor, digite algo."
+            return "Por favor, digite algo."
 
         try:
-            if not self.client:
-                self.client = OpenAI()  # instância via variável de ambiente
-
             messages = []
             if self.file_context:
-                messages.append({"role": "system", "content": f"Use o seguinte contexto: {self.file_context}"})
+                messages.append({
+                    "role": "system",
+                    "content": f"Use o seguinte contexto do arquivo para ajudar a responder: {self.file_context}"
+                })
             messages.append({"role": "user", "content": user_input})
 
             response = self.client.chat.completions.create(
-                model="o4-mini-2025-04-16",
+                model="gpt-4o-mini",  # Ajuste para o modelo que você quer usar
                 messages=messages
             )
-            return response.choices[0].message.content.strip()
+            bot_reply = response.choices[0].message.content.strip()
+            return bot_reply
 
         except Exception as e:
             return f"Erro: {str(e)}"
 
-    def set_api_key(self, api_key):
-        self.api_key = api_key
-        self.client = OpenAI(api_key=api_key)
-        return "🔑 API Key atualizada com sucesso."
+# ===================== Interface =====================
+def render_interface(bot):
+    st.title("ChatGPT usando uma rag local")
 
+    api_key_input = st.text_input("Digite sua OpenAI API Key:", type="password", key="api_key_input")
+    if api_key_input and api_key_input != bot.api_key:
+        bot.set_api_key(api_key_input)
+        st.session_state["bot"] = bot
+        st.success("API Key atualizada.")
 
-# -------------------------
-# Interface Streamlit
-# -------------------------
+    if "history" not in st.session_state:
+        st.session_state["history"] = []
+
+    user_input = st.text_input("Digite sua pergunta:", key="user_input")
+
+    if st.button("Enviar", key="send_button"):
+        if not bot.api_key:
+            st.error("Por favor, informe sua API Key antes de enviar a mensagem.")
+        elif not user_input.strip():
+            st.warning("Digite uma pergunta para enviar.")
+        else:
+            resposta = bot.ask_chatgpt(user_input)
+            st.session_state["history"].append(("Você", user_input))
+            st.session_state["history"].append(("ChatGPT", resposta))
+            st.session_state["bot"] = bot
+
+    for speaker, msg in st.session_state.get("history", []):
+        if speaker == "Você":
+            st.markdown(f"**{speaker}:** {msg}")
+        else:
+            st.markdown(f"**{speaker}:** {msg}")
+
+    if st.button("Limpar chat e contexto", key="clear_button"):
+        st.session_state["history"] = []
+        bot.load_file_context()
+        st.session_state["bot"] = bot
+        st.success("Chat e contexto limpos. Faça uma nova pergunta para continuar.")
+
+# ===================== Main =====================
 def main():
-    st.set_page_config(page_title="ChatGPT Bot", layout="wide")
-    st.title("🤖 ChatGPT Bot")
-
-    # Estado global
     if "bot" not in st.session_state:
-        st.session_state.bot = Bot()
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+        st.session_state["bot"] = Bot()
 
-    bot = st.session_state.bot
-
-    # Configurações
-    with st.expander("⚙️ Configurações"):
-        api_key = st.text_input("Coloque sua API Key:", type="password")
-        if st.button("Atualizar a API"):
-            if api_key:
-                result = bot.set_api_key(api_key)
-                st.success(result)
-            else:
-                st.warning("Digite uma API Key válida.")
-
-        uploaded_files = st.file_uploader(
-            "Faça upload de arquivos .txt ou .pdf para contexto",
-            type=["txt", "pdf"],
-            accept_multiple_files=True
-        )
-        if uploaded_files:
-            result = bot.load_file_context(uploaded_files)
-            st.info(result)
-
-        if st.button("Limpar contexto"):
-            bot.file_context = None
-            st.success("Contexto limpo com sucesso.")
-
-    # Histórico do chat
-    for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            st.markdown(f"**Você:** {msg['content']}")
-        else:
-            st.markdown(f"**ChatGPT:** {msg['content']}")
-
-    # Entrada de texto
-    user_input = st.text_input("Digite sua mensagem:")
-    if st.button("Enviar"):
-        if user_input.strip():
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            response = bot.ask_chatgpt(user_input)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.experimental_rerun()
-        else:
-            st.warning("Digite algo antes de enviar.")
-
+    bot = st.session_state["bot"]
+    render_interface(bot)
 
 if __name__ == "__main__":
     main()
