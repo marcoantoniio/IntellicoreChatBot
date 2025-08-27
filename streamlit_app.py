@@ -1,5 +1,7 @@
+# main.py
 import streamlit as st
 import fitz  # PyMuPDF
+import os
 from openai import OpenAI
 
 # -------------------------
@@ -8,8 +10,12 @@ from openai import OpenAI
 class Bot:
     def __init__(self, api_key=None):
         self.api_key = api_key
-        self.client = OpenAI(api_key=api_key) if api_key else None
+        self.client = None
         self.file_context = None
+
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
+            self.client = OpenAI()  # sem passar api_key
 
     def read_pdf(self, file_path):
         text = ""
@@ -32,7 +38,6 @@ class Bot:
                     context += f"\n\n--- {filename} ---\n{content}"
 
                 elif filename.lower().endswith(".pdf"):
-                    # Salvar temporariamente para abrir no fitz
                     temp_path = f"/tmp/{filename}"
                     with open(temp_path, "wb") as f:
                         f.write(uploaded_file.read())
@@ -43,7 +48,7 @@ class Bot:
                 return "📂 Arquivos carregados com sucesso."
             else:
                 return "⚠️ Nenhum arquivo válido carregado."
-            
+
         except Exception as e:
             return f"Erro ao carregar arquivos: {str(e)}"
 
@@ -56,7 +61,7 @@ class Bot:
 
         try:
             if not self.client:
-                self.client = OpenAI(api_key=self.api_key)
+                self.client = OpenAI()  # instância via variável de ambiente
 
             messages = []
             if self.file_context:
@@ -74,7 +79,8 @@ class Bot:
 
     def set_api_key(self, api_key):
         self.api_key = api_key
-        self.client = OpenAI(api_key=self.api_key)
+        os.environ["OPENAI_API_KEY"] = api_key
+        self.client = OpenAI()  # instância via variável de ambiente
         return "🔑 API Key atualizada com sucesso."
 
 
