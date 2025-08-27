@@ -1,6 +1,4 @@
-# main.py
 import streamlit as st
-import os
 import fitz  # PyMuPDF
 from openai import OpenAI
 
@@ -10,12 +8,8 @@ from openai import OpenAI
 class Bot:
     def __init__(self, api_key=None):
         self.api_key = api_key
-        self.client = None
+        self.client = OpenAI(api_key=api_key) if api_key else None
         self.file_context = None
-
-        if api_key:
-            os.environ["OPENAI_API_KEY"] = api_key
-            self.client = OpenAI()
 
     def read_pdf(self, file_path):
         text = ""
@@ -62,8 +56,7 @@ class Bot:
 
         try:
             if not self.client:
-                os.environ["OPENAI_API_KEY"] = self.api_key
-                self.client = OpenAI()
+                self.client = OpenAI(api_key=self.api_key)
 
             messages = []
             if self.file_context:
@@ -81,8 +74,7 @@ class Bot:
 
     def set_api_key(self, api_key):
         self.api_key = api_key
-        os.environ["OPENAI_API_KEY"] = api_key
-        self.client = OpenAI()
+        self.client = OpenAI(api_key=self.api_key)
         return "🔑 API Key atualizada com sucesso."
 
 
@@ -141,6 +133,7 @@ def main():
             st.experimental_rerun()
         else:
             st.warning("Digite algo antes de enviar.")
+
 
 if __name__ == "__main__":
     main()
